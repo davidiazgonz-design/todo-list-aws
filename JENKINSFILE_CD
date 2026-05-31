@@ -1,0 +1,51 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Get Code') {
+            steps {
+                git url: 'https://github.com/davidiazgonz-design/todo-list-aws.git', branch: 'master'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Desplegando la infraestructura en el entorno de PRODUCTION...'
+                sh '''
+                    sam build
+                    sam deploy --stack-name todo-list-aws-stack \
+                               --s3-bucket pruebaunir-p26 \
+                               --capabilities CAPABILITY_IAM \
+                               --no-confirm-changeset \
+                               --no-fail-on-empty-changeset \
+                               --parameter-overrides Stage=production
+                '''
+            }
+        }
+
+        stage('Rest Test') {
+            steps {
+                echo '=== Ejecutando Pruebas de Integración de Solo Lectura en Producción ==='
+                withCredentials([string(
+                    credentialsId: 'aws-credenciales-proyecto', 
+                    variable: 'AWS_SECRET_ACCESS_KEY'
+                )]) {
+                    sh '''
+                        python3 -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install pytest requests
+                        BASE_URL=$(aws cloudformation describe-stacks \
+                            --stack-name todo-list-aws-stack \
+                            --region us-east-1 \
+                            --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' \
+                            --output text)
+                        echo "URL de producción detectada: ${BASE_URL}"
+                        export BASE_URL
+                        pytest test/integration/todoApiTest.py -k "get or list"
+                    '''
+                }
+            }
+        }
+    }
+}
