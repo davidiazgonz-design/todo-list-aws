@@ -4,12 +4,22 @@ pipeline {
     stages {
         stage('Get Code') {
             steps {
+                sh '''
+                    echo "=== DIAGNÓSTICO NODO ==="
+                    echo "Usuario: \$(whoami)"
+                    echo "Máquina: \$(hostname)"
+                '''
                 git url: 'https://github.com/davidiazgonz-design/todo-list-aws.git', branch: 'master'
             }
         }
 
         stage('Deploy') {
             steps {
+                sh '''
+                    echo "=== DIAGNÓSTICO NODO ==="
+                    echo "Usuario: \$(whoami)"
+                    echo "Máquina: \$(hostname)"
+                '''
                 echo 'Desplegando la infraestructura en el entorno de PRODUCTION...'
                 sh '''
                     sam build
@@ -24,8 +34,15 @@ pipeline {
         }
 
         stage('Rest Test') {
+            agent { label 'agente2' }
             steps {
+                sh '''
+                    echo "=== DIAGNÓSTICO NODO ==="
+                    echo "Usuario: \$(whoami)"
+                    echo "Máquina: \$(hostname)"
+                '''
                 echo '=== Ejecutando Pruebas de Integración de Solo Lectura en Producción ==='
+                git url: 'https://github.com/davidiazgonz-design/todo-list-aws.git', branch: 'master'
                 withCredentials([string(
                     credentialsId: 'aws-credenciales-proyecto', 
                     variable: 'AWS_SECRET_ACCESS_KEY'
@@ -35,12 +52,14 @@ pipeline {
                         . venv/bin/activate
                         pip install --upgrade pip
                         pip install pytest requests
-                        BASE_URL=$(aws cloudformation describe-stacks \
+                        
+                        BASE_URL=\$(aws cloudformation describe-stacks \
                             --stack-name todo-list-aws-stack \
                             --region us-east-1 \
                             --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' \
                             --output text)
-                        echo "URL de producción detectada: ${BASE_URL}"
+                        echo "URL de producción detectada por el agente: \${BASE_URL}"
+                        
                         export BASE_URL
                         pytest test/integration/todoApiTest.py -k "get or list"
                     '''
